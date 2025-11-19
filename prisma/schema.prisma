@@ -1,0 +1,348 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Auth / RBAC
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(viewer)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  admin
+  coordinator
+  viewer
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  ip         String?
+  userAgent  String?
+  at         DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Ingestion + Canonical
+model TimeEntryRawIngest {
+  rawId            String    @id @default(uuid())
+  networkId        String
+  fileId           String
+  sourceFilename   String
+  sourceRowNumber  Int
+  receivedAtUtc    DateTime  @default(now())
+  rawRow           Json
+  rowHash          String
+  isSuperseded     Boolean   @default(false)
+  processed        Boolean   @default(false)
+  processedAtUtc   DateTime?
+  processingErrors String?
+
+  timeEntryRecords TimeEntryRecord[]
+
+  @@unique([networkId, fileId, rowHash])
+  @@map("time_entry_raw_ingest")
+}
+
+model TimeEntryRecord {
+  timesheetId        String                @id @default(uuid())
+  networkId          String
+  businessKey        String
+  recordVersion      Int                   @default(1)
+  isCurrent          Boolean               @default(true)
+  status             TimeEntryRecordStatus @default(normalized)
+  validationFlags    String[]
+  employeeNetworkId  String?
+  employeeInternalId String?
+  employeeName       String?
+  shiftDate          DateTime?
+  timezone           String?
+  clockInAt          DateTime?
+  clockOutAt         DateTime?
+  breakMinutes       Int?
+  recordedHours      Decimal?
+  computedHours      Decimal?
+  payCode            String?
+  unitOrDepartment   String?
+  costCenter         String?
+  matchedShiftId     Int?
+  timesheetDepartment String?
+  shiftDepartment    String?
+  incentiveFlag      Boolean               @default(false)
+  incentiveNote      String?
+  rawId              String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  rawIngest TimeEntryRawIngest @relation(fields: [rawId], references: [rawId])
+
+  @@map("time_entry_records")
+}
+
+enum TimeEntryRecordStatus {
+  normalized
+  matched
+  needs_review
+  posted
+  error
+}
+
+model EmployeeCrosswalk {
+  networkId          String
+  networkEmployeeId  String
+  internalEmployeeId String
+  activeFlag         Boolean @default(true)
+  notes              String?
+
+  @@id([networkId, networkEmployeeId])
+  @@map("employee_crosswalk")
+}
+
+model NetworkMapping {
+  networkId   String   @id
+  mapping     Json
+  activeFlag  Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@map("network_mappings")
+}
+
+model IncentiveCatalog {
+  id             String    @id @default(uuid())
+  networkId      String
+  departmentCode String
+  rules          Json
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+
+  @@map("incentive_catalog")
+}
+
+model Network {
+  id          String  @id
+  name        String
+  activeFlag  Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("networks")
+}
+
+// Local "Scheduling App" (for DEV)
+model Shift {
+  shiftId           Int      @id
+  employeeInternalId String
+  start             DateTime
+  end               DateTime
+  department        String
+  facility          String
+  status            String
+  shiftType         String
+  requiresApproval  Boolean  @default(false)
+  source            String
+  hasIncentives     Boolean  @default(false)
+  incentives        Json?
+
+  timesheets Timesheet[]
+
+  @@map("shifts")
+}
+
+model Timesheet {
+  id              Int      @id @default(autoincrement())
+  shiftId         Int
+  hoursWorked     Decimal?
+  breakMinutes    Int?
+  punches         Json?
+  payCode         String?
+  timeclockStatus String?
+  internalStatus  String?
+  state           String?
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+
+  shift Shift @relation(fields: [shiftId], references: [shiftId])
+
+  @@map("timesheets")
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fieldMappings            FieldMapping[]
+  foreignEmployeeMaps      ForeignEmployeeMap[]
+  payrollTransformationRules PayrollTransformationRule[]
+  payrollIncentiveRules    PayrollIncentiveRule[]
+  payrollTransformerConfig PayrollTransformerConfig?
+  invoiceTransformationRules InvoiceTransformationRule[]
+  invoiceTransformerConfig InvoiceTransformerConfig?
+
+  @@map("clients")
+}
+
+model FieldMapping {
+  id            String   @id @default(uuid())
+  clientId      String
+  sourceField   String
+  targetField   String
+  transformRule String
+  transformType TransformType @default(string)
+  transformConfig Json?
+  lastUpdated   DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("field_mappings")
+}
+
+enum TransformType {
+  string
+  numeric
+  dateParse
+  concat
+  lookup
+}
+
+model ForeignEmployeeMap {
+  id                 String   @id @default(uuid())
+  clientId           String
+  clientEmployeeId   String
+  internalEmployeeId String
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, clientEmployeeId])
+  @@map("foreign_employee_maps")
+}
+
+model PayrollTransformationRule {
+  id            String   @id @default(uuid())
+  clientId      String
+  ruleId        String   // e.g., "1", "2", "8", etc.
+  name          String
+  category      String
+  purpose       String
+  ruleLogic      String
+  dataPointsReferenced Json // Array of strings
+  inputFields   Json    // Array of strings
+  outputFields   Json   // Array of strings
+  parameters     Json?  // Optional parameters
+  order         Int     // Order of execution
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, ruleId])
+  @@map("payroll_transformation_rules")
+}
+
+model PayrollIncentiveRule {
+  id            String   @id @default(uuid())
+  clientId      String
+  company       String
+  costCenters   Json     // Array of strings
+  dayOfWeek     Json?    // Array of numbers (0-6)
+  shiftType     String?  // "Day", "Night", or null for "Both"
+  timeRangeStart Int?    // Hour (0-23)
+  timeRangeEnd   Int?    // Hour (0-23)
+  amount        Decimal  // Extra dollars per hour
+  description   String
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_incentive_rules")
+}
+
+model PayrollTransformerConfig {
+  id                String   @id @default(uuid())
+  clientId          String   @unique
+  dayPayRate        Decimal  @default(58)
+  nightPayRate      Decimal  @default(63)
+  dayPayCode        String   @default("FXDY")
+  nightPayCode      String   @default("FXNT")
+  approverName      String   @default("Jennifer Devine")
+  lunchTimeHours    Decimal  @default(0.5)
+  incentivesEnabled Boolean  @default(true)
+  incentiveValidThrough DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_transformer_configs")
+}
+
+model InvoiceTransformationRule {
+  id            String   @id @default(uuid())
+  clientId      String
+  ruleId        String   // e.g., "1", "2", "3", etc.
+  name          String
+  category      String
+  purpose       String
+  ruleLogic      String
+  dataPointsReferenced Json // Array of strings
+  inputFields   Json    // Array of strings
+  outputFields   Json   // Array of strings
+  parameters     Json?  // Optional parameters
+  order         Int     // Order of execution
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, ruleId])
+  @@map("invoice_transformation_rules")
+}
+
+model InvoiceTransformerConfig {
+  id                String   @id @default(uuid())
+  clientId          String   @unique
+  flexFeeRate       Decimal  @default(25.00)
+  defaultFlexFeeRate Decimal @default(25.00)
+  invoiceNumberPrefix String @default("LVFLEX")
+  microInvoiceNumberPrefix String @default("MICFLEX")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_transformer_configs")
+}
