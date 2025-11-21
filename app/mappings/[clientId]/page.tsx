@@ -41,7 +41,7 @@ export default function ClientMappingPage() {
   return (
     <div className="flex-1 space-y-6 p-8">
       <div>
-        <h1 className="text-[28px] font-semibold text-foreground leading-tight">{client.name}</h1>
+        <h1 className="text-[30px] font-semibold text-foreground leading-tight">{client.name}</h1>
         <p className="text-muted-foreground">Manage field mappings and employee ID mappings for {client.name}</p>
       </div>
 

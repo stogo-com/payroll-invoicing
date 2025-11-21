@@ -95,23 +95,43 @@ export default function InvoicingPage() {
       }
 
       const result = await response.json()
-      console.log("[Invoice] Generated:", result.recordCount, "records")
+      console.log("[Invoice] Generated response:", result)
+      console.log("[Invoice] Record count:", result.recordCount)
+      console.log("[Invoice] Has outputs:", !!result.outputs)
+      console.log("[Invoice] Main invoice detail count:", result.outputs?.mainInvoiceDetail?.length || 0)
+      
+      // Always set the result and show preview, even if outputs structure is unexpected
       setGeneratedInvoiceData(result.data || [])
       setInvoiceResult(result)
       setSelectedPreviewFile("mainInvoiceDetail") // Default to main invoice detail
       setShowInvoicePreview(true)
       
-      toast({
-        title: "Invoice generated successfully",
-        description: `${result.recordCount} records processed. ${result.hasMicrohospitals ? '6 files' : '3 files'} generated.`,
-      })
+      if (!result.outputs) {
+        console.warn("[Invoice] Warning: Response missing outputs object")
+        toast({
+          title: "Invoice generated with warnings",
+          description: "Response structure may be incomplete. Check console for details.",
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Invoice generated successfully",
+          description: `${result.recordCount || 0} records processed. ${result.hasMicrohospitals ? '6 files' : '3 files'} generated.`,
+        })
+      }
     } catch (error) {
       console.error("[Invoice] Error:", error)
+      console.error("[Invoice] Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       toast({
         title: "Error generating invoice",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: error instanceof Error ? error.message : "Unknown error occurred. Check console for details.",
         variant: "destructive",
       })
+      setShowInvoicePreview(false)
+      setInvoiceResult(null)
     } finally {
       setIsGenerating(false)
     }
@@ -168,7 +188,7 @@ export default function InvoicingPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-semibold text-foreground leading-tight">Invoice</h1>
+        <h1 className="text-[30px] font-semibold text-foreground leading-tight">Invoice</h1>
       </div>
 
       {/* Network and Pay Period Selection */}
@@ -441,20 +461,40 @@ export default function InvoicingPage() {
               Generated Invoice Data
             </h2>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground font-medium">
-                Invoice Number: <span className="font-semibold text-foreground">{invoiceResult.invoiceNumber}</span>
-              </span>
+              {invoiceResult.invoiceNumber && (
+                <span className="text-sm text-muted-foreground font-medium">
+                  Invoice Number: <span className="font-semibold text-foreground">{invoiceResult.invoiceNumber}</span>
+                </span>
+              )}
             </div>
           </div>
+          
+          {/* Show error message if outputs are missing */}
+          {!invoiceResult.outputs && (
+            <div className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+              <p className="text-sm text-destructive font-medium mb-2">
+                ⚠️ No output data received from the server.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The API response did not include the expected outputs structure. Please check the browser console for details.
+              </p>
+              <details className="mt-2">
+                <summary className="text-xs text-muted-foreground cursor-pointer">View response data</summary>
+                <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40">
+                  {JSON.stringify(invoiceResult, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
           
           <div className="mb-4 p-3 rounded-lg bg-muted border border-border">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Main Records:</span> <span className="font-semibold text-foreground">{invoiceResult.outputs.mainInvoiceDetail.length}</span>
+                <span className="text-muted-foreground">Main Records:</span> <span className="font-semibold text-foreground">{invoiceResult.outputs?.mainInvoiceDetail?.length || 0}</span>
               </div>
               {invoiceResult.hasMicrohospitals && (
                 <div>
-                  <span className="text-muted-foreground">Microhospital Records:</span> <span className="font-semibold text-foreground">{invoiceResult.outputs.microInvoiceDetail.length}</span>
+                  <span className="text-muted-foreground">Microhospital Records:</span> <span className="font-semibold text-foreground">{invoiceResult.outputs?.microInvoiceDetail?.length || 0}</span>
                 </div>
               )}
               <div>
@@ -464,115 +504,118 @@ export default function InvoicingPage() {
           </div>
 
           {/* Download Buttons */}
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Output Group A - Internal Review Files */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">Internal Review Files (Excel)</h3>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => downloadFile(
-                  invoiceResult.outputs.mainInvoiceDetail, 
-                  `FLEX_Lehigh_Invoice_Detail_${invoiceResult.invoiceNumber}`, 
-                  "xlsx"
-                )}
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Main Invoice Detail
-              </Button>
-              
-              {invoiceResult.hasMicrohospitals && (
+          {invoiceResult.outputs && (
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Output Group A - Internal Review Files */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground">Internal Review Files (Excel)</h3>
                 <Button
                   variant="outline"
                   className="w-full justify-start"
                   onClick={() => downloadFile(
-                    invoiceResult.outputs.microInvoiceDetail, 
-                    `FLEX_Lehigh_Micro_Invoice_Detail_MICFLEX1012`, 
+                    invoiceResult.outputs?.mainInvoiceDetail || [], 
+                    `FLEX_Lehigh_Invoice_Detail_${invoiceResult.invoiceNumber}`, 
                     "xlsx"
                   )}
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Micro Invoice Detail
+                  Main Invoice Detail
                 </Button>
-              )}
-            </div>
-
-            {/* Output Group B - Invoice Files (SFTP) */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">Invoice Files for SFTP (CSV)</h3>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => downloadFile(
-                  invoiceResult.outputs.mainInvoiceCSV, 
-                  `LVHNInvoice_${new Date().toISOString().split("T")[0].replace(/-/g, "")}`, 
-                  "csv"
+                
+                {invoiceResult.hasMicrohospitals && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => downloadFile(
+                      invoiceResult.outputs?.microInvoiceDetail || [], 
+                      `FLEX_Lehigh_Micro_Invoice_Detail_MICFLEX1012`, 
+                      "xlsx"
+                    )}
+                  >
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Micro Invoice Detail
+                  </Button>
                 )}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Main Invoice CSV
-              </Button>
-              
-              {invoiceResult.hasMicrohospitals && (
+              </div>
+
+              {/* Output Group B - Invoice Files (SFTP) */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground">Invoice Files for SFTP (CSV)</h3>
                 <Button
                   variant="outline"
                   className="w-full justify-start"
                   onClick={() => downloadFile(
-                    invoiceResult.outputs.microInvoiceCSV, 
-                    `LVHNInvoiceMicroHospitals_${new Date().toISOString().split("T")[0].replace(/-/g, "")}R`, 
+                    invoiceResult.outputs?.mainInvoiceCSV || [], 
+                    `LVHNInvoice_${new Date().toISOString().split("T")[0].replace(/-/g, "")}`, 
                     "csv"
                   )}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Micro Invoice CSV
+                  Main Invoice CSV
                 </Button>
-              )}
-            </div>
-
-            {/* Output Group C - Productivity Files (SFTP) */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">Productivity Files for SFTP (CSV)</h3>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => downloadFile(
-                  invoiceResult.outputs.mainProductivityCSV, 
-                  `LVHNProductivityHours_${new Date().toISOString().split("T")[0].replace(/-/g, "")}`, 
-                  "csv"
+                
+                {invoiceResult.hasMicrohospitals && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => downloadFile(
+                      invoiceResult.outputs?.microInvoiceCSV || [], 
+                      `LVHNInvoiceMicroHospitals_${new Date().toISOString().split("T")[0].replace(/-/g, "")}R`, 
+                      "csv"
+                    )}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Micro Invoice CSV
+                  </Button>
                 )}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Main Productivity CSV
-              </Button>
-              
-              {invoiceResult.hasMicrohospitals && (
+              </div>
+
+              {/* Output Group C - Productivity Files (SFTP) */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground">Productivity Files for SFTP (CSV)</h3>
                 <Button
                   variant="outline"
                   className="w-full justify-start"
                   onClick={() => downloadFile(
-                    invoiceResult.outputs.microProductivityCSV, 
-                    `LVHNProductivityHoursMicroHospitals_${new Date().toISOString().split("T")[0].replace(/-/g, "")}R`, 
+                    invoiceResult.outputs?.mainProductivityCSV || [], 
+                    `LVHNProductivityHours_${new Date().toISOString().split("T")[0].replace(/-/g, "")}`, 
                     "csv"
                   )}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Micro Productivity CSV
+                  Main Productivity CSV
                 </Button>
-              )}
-            </div>
-          </div>
-
-          {/* File Preview Selector */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Preview Generated Files</h3>
-              <div className="text-sm text-muted-foreground">
-                Select a file to preview its contents
+                
+                {invoiceResult.hasMicrohospitals && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => downloadFile(
+                      invoiceResult.outputs?.microProductivityCSV || [], 
+                      `LVHNProductivityHoursMicroHospitals_${new Date().toISOString().split("T")[0].replace(/-/g, "")}R`, 
+                      "csv"
+                    )}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Micro Productivity CSV
+                  </Button>
+                )}
               </div>
             </div>
-            
-            {/* File Tabs */}
-            <div className="flex flex-wrap gap-2 mb-4 border-b border-border pb-2">
+          )}
+
+          {/* File Preview Selector */}
+          {invoiceResult.outputs ? (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Preview Generated Files</h3>
+                <div className="text-sm text-muted-foreground">
+                  Select a file to preview its contents
+                </div>
+              </div>
+              
+              {/* File Tabs */}
+              <div className="flex flex-wrap gap-2 mb-4 border-b border-border pb-2">
               {/* Main Invoice Detail */}
               <button
                 onClick={() => setSelectedPreviewFile("mainInvoiceDetail")}
@@ -585,7 +628,7 @@ export default function InvoicingPage() {
                 <FileSpreadsheet className="h-4 w-4" />
                 Main Invoice Detail
                 <span className="ml-1 text-xs opacity-75">
-                  ({invoiceResult.outputs.mainInvoiceDetail.length})
+                  ({invoiceResult.outputs?.mainInvoiceDetail?.length || 0})
                 </span>
               </button>
 
@@ -602,7 +645,7 @@ export default function InvoicingPage() {
                   <FileSpreadsheet className="h-4 w-4" />
                   Micro Invoice Detail
                   <span className="ml-1 text-xs opacity-75">
-                    ({invoiceResult.outputs.microInvoiceDetail.length})
+                    ({invoiceResult.outputs?.microInvoiceDetail?.length || 0})
                   </span>
                 </button>
               )}
@@ -619,7 +662,7 @@ export default function InvoicingPage() {
                 <Download className="h-4 w-4" />
                 Main Invoice CSV
                 <span className="ml-1 text-xs opacity-75">
-                  ({invoiceResult.outputs.mainInvoiceCSV.length})
+                  ({invoiceResult.outputs?.mainInvoiceCSV?.length || 0})
                 </span>
               </button>
 
@@ -636,7 +679,7 @@ export default function InvoicingPage() {
                   <Download className="h-4 w-4" />
                   Micro Invoice CSV
                   <span className="ml-1 text-xs opacity-75">
-                    ({invoiceResult.outputs.microInvoiceCSV.length})
+                    ({invoiceResult.outputs?.microInvoiceCSV?.length || 0})
                   </span>
                 </button>
               )}
@@ -653,7 +696,7 @@ export default function InvoicingPage() {
                 <Download className="h-4 w-4" />
                 Main Productivity CSV
                 <span className="ml-1 text-xs opacity-75">
-                  ({invoiceResult.outputs.mainProductivityCSV.length})
+                  ({invoiceResult.outputs?.mainProductivityCSV?.length || 0})
                 </span>
               </button>
 
@@ -670,7 +713,7 @@ export default function InvoicingPage() {
                   <Download className="h-4 w-4" />
                   Micro Productivity CSV
                   <span className="ml-1 text-xs opacity-75">
-                    ({invoiceResult.outputs.microProductivityCSV.length})
+                    ({invoiceResult.outputs?.microProductivityCSV?.length || 0})
                   </span>
                 </button>
               )}
@@ -678,7 +721,7 @@ export default function InvoicingPage() {
 
             {/* Preview Table */}
             {(() => {
-              const previewData = invoiceResult.outputs[selectedPreviewFile] || []
+              const previewData = invoiceResult.outputs?.[selectedPreviewFile] || []
               const fileLabels: Record<string, string> = {
                 mainInvoiceDetail: "Main Invoice Detail (Excel)",
                 microInvoiceDetail: "Micro Invoice Detail (Excel)",
@@ -688,12 +731,15 @@ export default function InvoicingPage() {
                 microProductivityCSV: "Micro Productivity CSV",
               }
 
-              if (previewData.length === 0) {
+              console.log("[Invoice] Preview data for", selectedPreviewFile, ":", previewData.length, "records")
+              console.log("[Invoice] First record:", previewData[0])
+
+              if (!previewData || previewData.length === 0) {
                 return (
                   <div className="p-8 text-center border border-border rounded-lg bg-muted/30">
                     <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
                     <p className="text-muted-foreground font-medium">
-                      No data available for {fileLabels[selectedPreviewFile]}
+                      No data available for {fileLabels[selectedPreviewFile] || selectedPreviewFile}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
                       This file contains no records
@@ -771,7 +817,15 @@ export default function InvoicingPage() {
                 </div>
               )
             })()}
-          </div>
+            </div>
+          ) : (
+            <div className="mt-6 p-8 text-center border border-border rounded-lg bg-muted/30">
+              <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground font-medium">
+                Preview data will appear here once invoice is generated
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -798,3 +852,4 @@ function convertToCSV(data: any[]): string {
   
   return csvRows.join("\n")
 }
+

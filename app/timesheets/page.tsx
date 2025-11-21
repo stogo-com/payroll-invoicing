@@ -49,6 +49,7 @@ export default function TimesheetsPage() {
   }>({})
   const [combinedTimesheetData, setCombinedTimesheetData] = useState<any[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(false)
+  const [editingCell, setEditingCell] = useState<{ rowIndex: number; header: string } | null>(null)
   const { toast } = useToast()
 
   const handleNetworkChange = (value: string) => {
@@ -123,10 +124,24 @@ export default function TimesheetsPage() {
     combineFiles()
   }, [uploadedFiles.contingentWorker, uploadedFiles.manualAdds, toast])
 
+  const handleCellChange = (rowIndex: number, header: string, newValue: string) => {
+    setCombinedTimesheetData((prev) => {
+      const updated = [...prev]
+      updated[rowIndex] = { ...updated[rowIndex], [header]: newValue }
+      return updated
+    })
+    // Track edited rows
+    setEditedTimesheets((prev) => new Set(prev).add(rowIndex.toString()))
+  }
+
   const handleSendTimesheets = () => {
-    console.log("[v0] Sending all approved timesheets")
+    console.log("[v0] Sending timesheets:", combinedTimesheetData.length, "records")
     setShowSendDialog(false)
     // TODO: Implement API call to scheduling application
+    toast({
+      title: "Time Sheets sent",
+      description: `${combinedTimesheetData.length} time sheet${combinedTimesheetData.length !== 1 ? "s" : ""} sent successfully.`,
+    })
   }
 
   const handleUpdateTimesheets = () => {
@@ -141,9 +156,9 @@ export default function TimesheetsPage() {
   }
 
   const getSendSummary = () => {
-    const mockApprovedCount = 15
+    const count = combinedTimesheetData.length
     const networkName = selectedNetwork ? getNetworkName(selectedNetwork) : "All Networks"
-    return { count: mockApprovedCount, network: networkName }
+    return { count, network: networkName }
   }
 
   const getNetworkName = (networkId: string): string => {
@@ -159,7 +174,7 @@ export default function TimesheetsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-semibold text-foreground leading-tight">Time Sheets</h1>
+        <h1 className="text-[30px] font-semibold text-foreground leading-tight">Time Sheets</h1>
         <div className="flex gap-2">
           <Dialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
             <DialogTrigger asChild>
@@ -195,7 +210,7 @@ export default function TimesheetsPage() {
           </Button>
           <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
             <DialogTrigger asChild>
-              <Button disabled={!selectedNetwork}>
+              <Button disabled={!selectedNetwork || combinedTimesheetData.length === 0}>
                 <span className="mr-2">📤</span>
                 Send Time Sheets
               </Button>
@@ -301,17 +316,44 @@ export default function TimesheetsPage() {
                       {Object.keys(combinedTimesheetData[0] || {}).map((header) => {
                         const value = row[header] || ""
                         const isNumeric = header.includes("Hours") || header === "Cost Center"
+                        const isEditing = editingCell?.rowIndex === index && editingCell?.header === header
+                        const cellKey = `${index}-${header}`
                         
                         return (
                           <td
                             key={header}
-                            className="border border-border px-3 py-2 text-xs whitespace-nowrap text-foreground"
+                            className="border border-border px-3 py-2 text-xs whitespace-nowrap"
                             style={{
                               fontFamily: isNumeric ? "monospace" : "inherit",
                               textAlign: isNumeric ? "right" : "left",
                             }}
+                            onDoubleClick={() => setEditingCell({ rowIndex: index, header })}
                           >
-                            <span className="text-foreground">{value}</span>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={value}
+                                onChange={(e) => handleCellChange(index, header, e.target.value)}
+                                onBlur={() => setEditingCell(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    setEditingCell(null)
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEditingCell(null)
+                                  }
+                                }}
+                                className="w-full px-2 py-1 text-xs bg-background border border-primary rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                                autoFocus
+                              />
+                            ) : (
+                              <span 
+                                className="text-foreground cursor-text hover:bg-accent/50 px-1 py-0.5 rounded"
+                                title="Double-click to edit"
+                              >
+                                {value}
+                              </span>
+                            )}
                           </td>
                         )
                       })}

@@ -49,7 +49,7 @@ export default function CrosswalkPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-semibold text-foreground leading-tight">Employee Crosswalk</h1>
+          <h1 className="text-[30px] font-semibold text-foreground leading-tight">Employee Crosswalk</h1>
           <p className="text-muted-foreground">Manage mappings between client employee IDs and internal employee IDs</p>
         </div>
         <div className="flex items-center gap-2">

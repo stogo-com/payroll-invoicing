@@ -33,7 +33,7 @@ export default async function AdminMappingsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-[28px] font-semibold text-foreground leading-tight">Client Mappings</h1>
+          <h1 className="text-[30px] font-semibold text-foreground leading-tight">Client Mappings</h1>
           <p className="text-muted-foreground">Manage data transformation mappings for each client</p>
         </div>
         <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">

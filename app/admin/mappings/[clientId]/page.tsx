@@ -25,7 +25,7 @@ export default async function ClientMappingEditorPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[28px] font-semibold text-foreground leading-tight">Field Mapping Editor</h1>
+        <h1 className="text-[30px] font-semibold text-foreground leading-tight">Field Mapping Editor</h1>
         <p className="text-muted-foreground">
           {client?.name} ({client?.code})
         </p>

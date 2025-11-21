@@ -356,7 +356,7 @@ export default function PayrollPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-semibold text-foreground leading-tight">Payroll</h1>
+        <h1 className="text-[30px] font-semibold text-foreground leading-tight">Payroll</h1>
       </div>
 
       {/* Network and Pay Period Selection */}

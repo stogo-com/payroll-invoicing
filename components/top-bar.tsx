@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,17 +38,7 @@ export function TopBar({ title, children }: TopBarProps) {
     <header className="flex h-16 items-center justify-between border-b border-border bg-background px-4">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
-        <div className="flex items-center gap-3">
-          <Image 
-            src="/stogomark.png" 
-            alt="STOGO" 
-            width={32} 
-            height={32} 
-            className="object-contain"
-            priority
-          />
-          {title && <h1 className="text-xl font-semibold text-foreground">{title}</h1>}
-        </div>
+        {title && <h1 className="text-2xl font-semibold text-foreground">{title}</h1>}
       </div>
 
       <div className="flex items-center gap-4">
